@@ -3,11 +3,7 @@ title: Ol (Otus Lisp)
 email: yuriy.chumak@mail.com
 description: Otus Lisp project page
 baseurl: "/ol"
-url: "http://yuriy-chumak.github.io"
-
-plugins:
-  - jekyll-sitemap
-  - jemoji
+url: "http://otus-lisp.github.io"
 
 # Build settings
 markdown: kramdown

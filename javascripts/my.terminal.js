@@ -34,12 +34,11 @@ $('#terminal').terminal(function(command, terminal) {
    var text = unescape(encodeURIComponent(command));
    ga('send', 'event', 'Console', 'eval', ""+text, {
       nonInteraction: true
-    });
+   });
 
    // todo: check parenthesis
    terminal.set_prompt('');
-   ol_eval(text);
-   terminal.set_prompt('> ');
+	stdInput = stdInput + text;
 }, {
    prompt: 'Please wait, loading library files...',
    name: 'repl',
@@ -62,55 +61,79 @@ $('#terminal').mousewheel(function(event) {
       return false;
 });
 
+// FILE SYSTEM
+var Libraries = [
+   // { path: "otus", name: "ffi.scm",    file: "https://raw.githubusercontent.com/otus-lisp/ol/master/libraries/otus/ffi.scm" },
+];
+
+// WASM
 var Module = {
 //   arguments: ['#', '-', '--embed'],
 //   arguments: ['platform', '-'],
-   dynamicLibraries: [], //, 'olvm.js', 'repl.wasm', 'oljs.wasm'],
+//   dynamicLibraries: [], //, 'olvm.js', 'repl.wasm', 'oljs.wasm'],
    INITIAL_MEMORY: 67108864,
 
-   preRun: function() {
-      console.log("preRun");
-      //LibraryManager.library = Module;
+   preRun: [
+      function() {
+         terminal.echo("");
 
-      function stdin() {
-         if (stdInput.length == 0) {
-            return undefined;
-         }
+         Libraries.forEach( function(i) {
+            terminal.echo("attaching fs file " + i.name + "...");
+            console.log("i: ", i.path + "/" + i.name);
+            if (i.path != "/")
+               FS.createPath("/", i.path, true, true);
+            FS.createPreloadedFile(i.path, i.name, i.file, true, false);
+         });
 
-         var chr = stdInput.charCodeAt(0);
-         stdInput = stdInput.substring(1);
-         return chr;
+         // done.
+         terminal.echo("Starting Ol ...");
       }
-      var stdout = null;
-      var stderr = null;
-      FS.init(stdin, stdout, stderr);
+   ],
+	// function() {
+   //    console.log("preRun");
+   //    //LibraryManager.library = Module;
 
-      Libraries.forEach( function(i) {
-         console.log("i: ", i.path + "/" + i.name);
-         if (i.path != "/")
-            FS.createPath("/", i.path, true, true);
-         FS.createDataFile(i.path + "/", i.name, i.data, true, false);
-      });
-   },
-   postRun: function() {
-      ol_init = Module.cwrap('ol_init', 'number', []);
-      ol_eval = Module.cwrap('ol_eval', 'number', ['string']);
+   //    function stdin() {
+	// 		console.log(stdin);
+   //       if (stdInput.length == 0) {
+   //          throw new FS.ErrnoError(6);
+   //       }
 
-      ol_init();
-		doit('(print "Welcome to Otus Lisp " (cdr *version*) "\\n")(define *interactive* #t)');
+   //       var chr = stdInput.charCodeAt(0);
+   //       stdInput = stdInput.substring(1);
+   //       return chr;
+   //    }
+   //    var stdout = null;
+   //    var stderr = null;
+   //    FS.init(stdin, stdout, stderr);
+   // },
+   postRun: [
+		function() {
+			// ol_init = Module.cwrap('ol_init', 'number', []);
+			// ol_eval = Module.cwrap('ol_eval', 'number', ['string']);
 
-      terminal.resume();
-      terminal.set_prompt('> ');
-      terminal.focus();
-   },
+			// ol_init();
+			// doit('(print "Welcome to Otus Lisp " (cdr *version*) "\\n")(define *interactive* #t)');
+
+			terminal.resume();
+			terminal.set_prompt('> ');
+			terminal.focus();
+		}
+	],
 
    print: function(text) {
+		// console.log("print:", text);
       if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
 
-		if (text == ";; Defined *interactive*") // Ol became in terminal really started
-			return;
 		if (text.startsWith("> > "))
 			text = text.substring(4);
+		if (text == ";; Defined *interactive*") // Ol became in terminal really started
+			return;
+		if (text == "type ',help' to help, ',quit' to end session.")
+			text = "type ',help' to help";
+
+		if (text.startsWith("> "))
+			text = text.substring(2);
 
 		// first output detected.
 		if (terminal.ready == false) {
@@ -119,9 +142,9 @@ var Module = {
       }
 
       // let's process OL's prompt:
-      terminal.set_prompt('> ');
-      terminal.resume();
       terminal.echo(text);
+      terminal.resume();
+      terminal.set_prompt('> ');
 
       ga('send', 'event', 'Console', 'stdout', text, {
          nonInteraction: true});
@@ -134,11 +157,11 @@ var Module = {
       //   terminal.pause();
    },
    printErr: function(text) {
-      error = (text || "").substring(errorLen);
-      terminal.error(error);
-      errorLen = (text || "").length;
+      terminal.error(text);
+		terminal.resume();
+      terminal.set_prompt('> ');
 
-      ga('send', 'event', 'Console', 'stderr', error, {
+      ga('send', 'event', 'Console', 'stderr', text, {
          nonInteraction: true});
    },
 /*   canvas: (function() {
@@ -189,65 +212,30 @@ window.onerror = function(event) {
    };
 };
 
-// FILE SYSTEM
-var Libraries = [
-      //{ path: "/otus", name: "ffi.scm",    file: "https://rawgit.com/yuriy-chumak/ol/master/libraries/otus/ffi.scm" },
-      //{ path: "/otus", name: "ffi.scm",    file: "lib/otus/ffi.scm" },
-      //{ path: "/lib",  name: "opengl.scm", file: "lib/opengl.scm" },
+window.prompt = function(event) {
+	if (stdInput.length == 0)
+		return undefined;
 
-      //{ path: "/EGL",       name: "version-1-1.scm", file: "https://rawgit.com/yuriy-chumak/ol/master/libraries/EGL/version-1-1.scm" },
+   let string = stdInput;
+	stdInput = "";
+	return string;
+};
 
-      //{ path: "/OpenGL",    name: "platform.scm", file: "https://rawgit.com/yuriy-chumak/ol/master/libraries/OpenGL/platform.scm" },
-      //{ path: "/OpenGL",    name: "platform.scm",    file: "lib/OpenGL/platform.scm" },
-      //{ path: "/OpenGL",    name: "version-1-0.scm", file: "lib/OpenGL/version-1-0.scm" },
-      //{ path: "/OpenGL",    name: "version-1-0.scm", file: "https://rawgit.com/yuriy-chumak/ol/master/libraries/OpenGL/version-1-0.scm" },
-      //{ path: "/lib/gl",  name: "config.scm", file: "lib/lib/gl/config.scm" },
-      //{ path: "/lib",     name: "gl.scm",     file: "lib/lib/gl.scm" },
 
-//      { path: "/OpenGL/ES", name: "version-2-0.scm", file: "https://rawgit.com/yuriy-chumak/ol/master/libraries/OpenGL/ES/version-2-0.scm" },
-//      { path: "/OpenGL/ES", name: "version-2-0.scm", file: "lib/version-2-0.scm" },
+// LOAD OLVM
+var script = document.createElement('script');
+script.src = "ol.js"; //javascripts/emscripten-1.37.35.js";
 
-      //{ path: "/", name: "test.lisp", file: "test.lisp" },
-      //{ path: "/", name: "repl", file: "https://rawgit.com/yuriy-chumak/ol/master/repl" }
-   ];
-var Downloaded = 0;
+script.addEventListener('load', function(me) {
+      terminal.set_prompt('');
+      if (!wasmSupported())
+         return;
 
-/*Libraries.forEach( function(item) {
-   $.ajax({
-      url: item.file,
-      type: 'GET',
-      beforeSend: function (xhr) {
-         xhr.overrideMimeType("text/plain; charset=x-user-defined");
-         console.log("let's download ", item.file);
-      },
-      error: function(a, b, c) {
-         console.log(a);
-         console.log(b);
-         console.log(c);
-      },
-      success: function( data ) {
-         console.log("ok: ", item.path + "/" + item.name)
-         item.data = data;
+      terminal.echo("Booting Virtual Machine...")
+}, false);
+script.addEventListener('error', function(event) {
+      terminal.set_prompt('');
+      terminal.echo("Can't find olvm. Build it first and try again.")
+}, false);
 
-         if (++Downloaded == Libraries.length) {*/
-            // load olvm
-            var script = document.createElement('script');
-            script.src = "olvm.js"; //javascripts/emscripten-1.37.35.js";
-
-            script.addEventListener('load', function(me) {
-                terminal.set_prompt('');
-                if (!wasmSupported())
-                    return;
-
-                terminal.echo("Booting Virtual Machine...")
-            }, false);
-            script.addEventListener('error', function(event) {
-                terminal.set_prompt('');
-                terminal.echo("Can't find olvm. Build it first and try again.")
-            }, false);
-
-            document.body.appendChild(script);
-/*         }
-      }
-   });
-});*/
+document.body.appendChild(script);
